@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { getAddress } from "viem";
 import { supabase } from "@/lib/x402";
 
 /**
@@ -13,8 +14,19 @@ import { supabase } from "@/lib/x402";
  * collect their bounty.
  */
 
+// Must normalise exactly as /claim does. Circle Wallets hands out lowercase
+// addresses; getAddress() checksums them. If only one end normalises, the
+// worker_address lookup below silently misses and the worker is told the job
+// isn't theirs — after they've already done the work.
 const Submit = z.object({
-  worker_address: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  worker_address: z.string().transform((a, ctx) => {
+    try {
+      return getAddress(a);
+    } catch {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Not a valid address" });
+      return z.NEVER;
+    }
+  }),
   result: z.string().min(1).max(50_000),
 });
 

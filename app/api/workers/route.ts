@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { getAddress } from "viem";
 import { supabase } from "@/lib/x402";
 import { provisionWorkerWallet } from "@/lib/circle-wallets";
 
@@ -54,7 +55,9 @@ export async function POST(req: NextRequest) {
     .from("workers")
     .insert({
       name,
-      address: wallet.address,
+      // Circle returns lowercase; the tasks table stores checksummed addresses.
+      // Normalise here so the two always agree and can be joined.
+      address: getAddress(wallet.address),
       circle_wallet_id: wallet.walletId,
       blockchain: wallet.blockchain,
     })

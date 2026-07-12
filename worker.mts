@@ -7,11 +7,11 @@
  * The worker never handles a payment itself. It just names an address, and the
  * x402 paywall on /api/tasks/[id]/result settles the bounty there.
  *
- *   npm run worker                 # paid to SELLER_ADDRESS
- *   npm run worker -- 0xAbC...     # paid to any address you like
+ *   npm run worker -- --name alice   # TaskMesh issues it a Circle wallet
+ *   npm run worker -- 0xAbC...       # or bring your own address
  *
- * Run two at once with different addresses to see the board hand different
- * jobs to different workers, each paid to their own wallet.
+ * Run two at once to see the board hand different jobs to different workers,
+ * each paid into their own wallet.
  */
 
 const BASE_URL = process.env.BASE_URL ?? "http://localhost:3000";
