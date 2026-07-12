@@ -40,3 +40,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Circle Wallets recovery file — NEVER commit. Move to a password manager.
+circle-recovery-file.dat
+*.recovery.dat
+recovery_file_*.dat

@@ -5,10 +5,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "generate-wallets": "node --experimental-transform-types --no-warnings generate-wallets.mts",
-    "agent": "node --experimental-transform-types --no-warnings --env-file=.env.local agent.mts"
+    "generate-wallets": "node --no-warnings generate-wallets.mts",
+    "agent": "node --no-warnings --env-file=.env.local agent.mts",
+    "worker": "node --no-warnings --env-file=.env.local worker.mts",
+    "requester": "node --no-warnings --env-file=.env.local requester.mts"
   },
   "dependencies": {
+    "@circle-fin/developer-controlled-wallets": "^10.8.0",
     "@circle-fin/x402-batching": "^2.0.4",
     "@langchain/core": "^1.1.32",
     "@langchain/openai": "^1.2.13",

@@ -27,9 +27,9 @@ const ARC_TESTNET_GATEWAY_WALLET = "0x0077777d7EBA4688BDeF3E311b846F25870A19B9";
 
 export const sellerAddress = process.env.SELLER_ADDRESS as `0x${string}`;
 
-const facilitator = new BatchFacilitatorClient();
+export const facilitator = new BatchFacilitatorClient();
 
-const supabase = createClient(
+export const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
@@ -42,7 +42,16 @@ interface PaymentPayload {
   extensions?: Record<string, unknown>;
 }
 
-function buildPaymentRequirements(price: string) {
+/**
+ * `payTo` defaults to the platform seller (Circle's original behaviour), but
+ * TaskMesh overrides it per task so the bounty settles to the WORKER that
+ * actually did the job. That's what makes this a marketplace rather than a
+ * single-seller shop.
+ */
+export function buildPaymentRequirements(
+  price: string,
+  payTo: `0x${string}` = sellerAddress,
+) {
   // Parse dollar amount to USDC atomic units (6 decimals)
   const amount = Math.round(parseFloat(price.replace("$", "")) * 1_000_000);
 
@@ -51,8 +60,12 @@ function buildPaymentRequirements(price: string) {
     network: ARC_TESTNET_NETWORK,
     asset: ARC_TESTNET_USDC,
     amount: amount.toString(),
-    payTo: sellerAddress,
-    maxTimeoutSeconds: 345600,
+    payTo,
+    // 30 days. Circle Gateway rejects shorter authorization windows with
+    // `authorization_validity_too_short` — both the SDK default and this repo's
+    // original value (345600 / 4 days) fail verification. 7 days passes verify
+    // but still fails settle. Do not lower this.
+    maxTimeoutSeconds: 2592000,
     extra: {
       name: "GatewayWalletBatched",
       version: "1",
