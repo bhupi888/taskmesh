@@ -7,15 +7,36 @@
  * The worker never handles a payment itself. It just names an address, and the
  * x402 paywall on /api/tasks/[id]/result settles the bounty there.
  *
- *   npm run worker -- --name alice   # TaskMesh issues it a Circle wallet
- *   npm run worker -- 0xAbC...       # or bring your own address
+ *   npm run worker -- --name alice          # TaskMesh issues it a Circle wallet
+ *   npm run worker -- 0xAbC...              # or bring your own address
+ *   npm run worker -- --name eve --lazy     # a BAD worker: submits filler
  *
  * Run two at once to see the board hand different jobs to different workers,
- * each paid into their own wallet.
+ * each paid into their own wallet. Run a --lazy one to watch the platform's
+ * validator reject its work and refuse to let it become payable.
  */
+
+import { summarize, llmConfigured } from "./lib/llm.ts";
 
 const BASE_URL = process.env.BASE_URL ?? "http://localhost:3000";
 const POLL_MS = 2000;
+
+/** Submit filler instead of doing the job — used to demo that validation bites. */
+const lazy = process.argv.includes("--lazy");
+
+/**
+ * Tasks this worker has already been rejected on.
+ *
+ * A rejected task goes back on the board, so without this the same worker
+ * re-claims it, fails validation again, and loops — burning a validation call
+ * every time. Backing off is the polite behaviour.
+ *
+ * NOTE: this is client-side, so it only fixes well-behaved workers. A hostile
+ * worker could still spin, and every spin costs the platform one validation
+ * call. The server-side fix is to record rejections per (task, worker) and
+ * refuse the re-claim. Named in the README as a known gap rather than hidden.
+ */
+const rejected = new Set<string>();
 
 /**
  * How this worker gets paid. Two routes:
@@ -85,15 +106,24 @@ interface Task {
 /**
  * Do the actual work.
  *
- * STUB — deliberately not an LLM yet. We're proving the payment loop first;
- * swapping this one function for a real model call is the next step and
- * changes nothing else in the system.
+ * Falls back to a crude extractive stub if no ANTHROPIC_API_KEY is set, so the
+ * payment loop still runs without a model. The stub is honest about being one.
  */
 async function doTask(task: Task): Promise<string> {
+  // `--lazy` makes this worker a bad actor on purpose: it submits filler
+  // instead of doing the job. The platform's validator should catch it and
+  // refuse to let the work become payable. Use it to demo that the guard works.
+  if (lazy) {
+    return "Yes, this was handled. Everything looks fine overall.";
+  }
+
+  if (llmConfigured()) {
+    return summarize(task.prompt);
+  }
+
   const text = task.prompt.replace(/^Summarize:\s*/i, "").trim();
   const sentences = text.match(/[^.!?]+[.!?]+/g) ?? [text];
-  const summary = sentences.slice(0, 2).join(" ").trim();
-  return `[stub summary] ${summary}`;
+  return `[stub summary — no ANTHROPIC_API_KEY set] ${sentences.slice(0, 2).join(" ").trim()}`;
 }
 
 async function tick() {
@@ -106,6 +136,9 @@ async function tick() {
   const { tasks } = (await res.json()) as { tasks: Task[] };
 
   for (const task of tasks) {
+    // Already failed this one. Don't spin on it.
+    if (rejected.has(task.id)) continue;
+
     // Claim it. Another worker may beat us here — that's a 409, not an error.
     const claim = await fetch(`${BASE_URL}/api/tasks/${task.id}/claim`, {
       method: "POST",
@@ -132,6 +165,18 @@ async function tick() {
       body: JSON.stringify({ worker_address: workerAddress, result }),
     });
 
+    // 422 = the platform graded the work and rejected it. The task goes back on
+    // the board and this worker earns nothing. Not a crash — the guard working.
+    if (submit.status === 422) {
+      const { reason } = (await submit.json()) as { reason?: string };
+      rejected.add(task.id); // don't re-claim work we already failed
+      console.error(
+        `  ${task.id.slice(0, 8)} — REJECTED by validation: ${reason ?? "no reason given"}`,
+      );
+      console.error(`    (back on the board, unpaid — not retrying)`);
+      continue;
+    }
+
     if (!submit.ok) {
       console.error(
         `  ${task.id.slice(0, 8)} — submit failed: ${submit.status} ${await submit.text()}`,
@@ -140,7 +185,7 @@ async function tick() {
     }
 
     console.log(
-      `  submitted ${task.id.slice(0, 8)} — awaiting ${task.bounty_usdc} USDC to ${workerAddress}`,
+      `  submitted ${task.id.slice(0, 8)} — passed validation, awaiting ${task.bounty_usdc} USDC`,
     );
   }
 }

@@ -11,6 +11,7 @@
     "requester": "node --no-warnings --env-file=.env.local requester.mts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.111.0",
     "@circle-fin/developer-controlled-wallets": "^10.8.0",
     "@circle-fin/x402-batching": "^2.0.4",
     "@langchain/core": "^1.1.32",

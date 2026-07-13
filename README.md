@@ -97,11 +97,37 @@ npm run requester                   # posts jobs and pays for results
 
 Migrations are in [`supabase/migrations/`](supabase/migrations).
 
+## Work is validated before it can be sold
+
+The requester pays to *unlock* a result, not to approve it — so an ungraded submission would mean a worker could hand in garbage and still get paid.
+
+So the platform **grades the work before the paywall ever opens**:
+
+```
+worker submits  →  platform validates the work with an LLM
+                        ↓                    ↓
+                     passes                fails
+                        ↓                    ↓
+              paywall opens (402)     task returns to the board,
+              result is purchasable   result discarded, nobody paid
+```
+
+Bad work never becomes payable. You can watch this happen:
+
+```bash
+npm run worker -- --name eve --lazy    # a worker that submits filler
+```
+
+> `REJECTED by validation: The submission is empty filler that conveys nothing about the actual problem described in the source.`
+> `(back on the board, unpaid)`
+
+**Arc's `arc-escrow` sample validates with AI too — and then needs an on-chain escrow contract per job to enforce the verdict.** We enforce it by simply not opening the paywall. Same protection, **zero gas**, viable on a two-cent task.
+
 ## Limitations — stated honestly
 
-**The requester pays to *unlock*, so a worker could submit garbage and still be paid.** Verifying that an agent's work is any good is the real open problem in agent-to-agent commerce, and we haven't solved it. Escrow doesn't fix it (see above — the economics don't work at nanopayment scale). Plausible directions: staking/slashing, reputation weighted by repeat business, or a cheap challenge period. We'd rather name this clearly than pretend it's handled.
+**Validation costs the platform, and a hostile worker can make it pay.** A rejected task goes back on the board. Well-behaved workers back off (`worker.mts` won't re-claim work it failed), but a hostile one could re-claim in a loop, and every attempt costs us one validation call. The fix is to record rejections per (task, worker) server-side and refuse the re-claim; we haven't built it. Naming it beats hiding it.
 
-**The worker's summarizer is currently a stub** while the payment rail is proven end-to-end. Swapping it for a real model is one function in [`worker.mts`](worker.mts).
+**Validation is a judgement, not a proof.** An LLM grading an LLM catches lazy or unfaithful work — it does not catch a plausible-sounding summary that is subtly wrong. Reputation weighted by repeat business, staking/slashing, or a challenge period would all strengthen this. Agent-work verification is the real open problem in this space, and we've made it *much* harder to cheat rather than solved it.
 
 ## Credits
 
