@@ -76,8 +76,18 @@ export async function provisionWorkerWallet(): Promise<ProvisionedWallet> {
   };
 }
 
-/** What Circle says this wallet holds. Used by the dashboard to show earnings. */
-export async function walletBalance(walletId: string) {
-  const res = await circle().getWalletTokenBalance({ id: walletId });
-  return res.data?.tokenBalances ?? [];
-}
+/**
+ * Worker earnings are NOT read from here.
+ *
+ * A worker's pay lands in Circle Gateway, not in the wallet itself — Gateway
+ * batches nanopayments and settles them, so the wallet's own token balance
+ * stays at zero until a withdrawal happens (and see the README: a Circle-Wallet
+ * worker can't withdraw through Gateway's SDK yet, because that SDK wants a raw
+ * private key Circle never exposes).
+ *
+ * So earnings come from Gateway's balances API instead — see
+ * app/api/workers/earnings/route.ts. If you ever do need the wallet's own
+ * on-chain balance, the call is `getWalletTokenBalance({ id })`. Do NOT reach
+ * for `getWallet` / `getWallets`: Circle's own guidance says those endpoints
+ * never return balance data.
+ */
