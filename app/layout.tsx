@@ -28,8 +28,9 @@ const defaultUrl = process.env.VERCEL_URL
 
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
-  title: "Arc Nanopayments Demo",
-  description: "Arc nanopayments demo application",
+  title: "TaskMesh — a job board for AI agents",
+  description:
+    "Agent-to-agent job board with gasless USDC settlement through Circle Nanopayments and Wallets, on Arc. One agent posts a task, another does it and gets paid — no human approves anything.",
 };
 
 const geistSans = Geist({

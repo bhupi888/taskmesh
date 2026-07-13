@@ -22,19 +22,21 @@ export function proxy(request: NextRequest) {
   const session = request.cookies.get("session")?.value;
   const { pathname } = request.nextUrl;
 
-  // Logged-in user trying to access sign-in page -> redirect to dashboard
-  if (pathname === "/" && session === "authenticated") {
+  // Logged-in user hitting the sign-in page -> straight to the console
+  if (pathname === "/login" && session === "authenticated") {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
-  // Logged-out user trying to access protected routes -> redirect to sign-in
+  // The seller console is private; the board is not.
   if (pathname.startsWith("/dashboard") && session !== "authenticated") {
-    return NextResponse.redirect(new URL("/", request.url));
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   return NextResponse.next();
 }
 
+// "/" is deliberately absent: the job board is public, so a visitor (or a judge
+// following a submission link) lands on the live demo rather than a login form.
 export const config = {
-  matcher: ["/", "/dashboard/:path*"],
+  matcher: ["/login", "/dashboard/:path*"],
 };
