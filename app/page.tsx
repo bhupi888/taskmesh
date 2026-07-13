@@ -13,6 +13,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SiteNav } from "@/components/site-nav";
+import { PostTask } from "@/components/post-task";
+import { PayButton } from "@/components/pay-button";
 import { Loader2, Wallet, CircleDollarSign, Users, Timer } from "lucide-react";
 
 /**
@@ -332,9 +334,12 @@ export default function BoardPage() {
         </div>
       </section>
 
-      {/* The board itself. */}
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">The board</h2>
+        {/* The human entry point: put work on the board yourself. */}
+        <PostTask />
+
+        {/* The board itself. */}
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold">The board</h2>
 
         <Card>
           <CardContent className="p-0">
@@ -345,17 +350,18 @@ export default function BoardPage() {
                   <TableHead>Task</TableHead>
                   <TableHead className="w-[90px] text-right">Bounty</TableHead>
                   <TableHead className="w-[110px]">Worker</TableHead>
-                  <TableHead className="w-[130px] text-right">
+                  <TableHead className="w-[260px]">Result</TableHead>
+                  <TableHead className="w-[110px] text-right">
                     Posted → paid
                   </TableHead>
-                  <TableHead className="w-[90px] text-right">Age</TableHead>
+                  <TableHead className="w-[80px] text-right">Age</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading && (
                   <TableRow>
                     <TableCell
-                      colSpan={4}
+                      colSpan={6}
                       className="h-24 text-center text-muted-foreground"
                     >
                       <Loader2 className="inline animate-spin mr-2" size={14} />
@@ -367,7 +373,7 @@ export default function BoardPage() {
                 {!loading && tasks.length === 0 && (
                   <TableRow>
                     <TableCell
-                      colSpan={4}
+                      colSpan={6}
                       className="h-24 text-center text-muted-foreground"
                     >
                       Nothing posted yet. Run{" "}
@@ -397,6 +403,24 @@ export default function BoardPage() {
                         ${t.bounty_usdc}
                       </TableCell>
                       <TableCell className="text-sm">{workerLabel(t)}</TableCell>
+
+                      {/* Where the paywall becomes something you can click. */}
+                      <TableCell className="text-sm">
+                        {t.status === "submitted" ? (
+                          <PayButton taskId={t.id} bounty={t.bounty_usdc} />
+                        ) : t.status === "paid" ? (
+                          <span className="text-xs text-emerald-400">
+                            paid — worker keeps the bounty
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            {t.status === "open"
+                              ? "waiting for a worker"
+                              : "worker is on it"}
+                          </span>
+                        )}
+                      </TableCell>
+
                       <TableCell className="text-right tabular-nums text-sm">
                         {secs === null ? (
                           <span className="text-muted-foreground">—</span>

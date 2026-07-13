@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { supabase } from "@/lib/x402";
+import { payerAddress } from "@/lib/payer";
 
 /**
  * The job board.
@@ -11,10 +12,18 @@ import { supabase } from "@/lib/x402";
  *        and it only comes out of /api/tasks/[id]/result after payment.
  */
 
+/**
+ * `requester_address` is optional. An agent posting for itself supplies its own
+ * address; the dashboard doesn't have a wallet, so it posts as the server's
+ * funder — the same wallet its "Pay & unlock" button spends from.
+ */
 const PostTask = z.object({
   prompt: z.string().min(1).max(10_000),
   bounty_usdc: z.string().regex(/^\d+(\.\d{1,6})?$/, "e.g. \"0.02\""),
-  requester_address: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  requester_address: z
+    .string()
+    .regex(/^0x[a-fA-F0-9]{40}$/)
+    .optional(),
   kind: z.literal("summarize").default("summarize"),
 });
 
@@ -31,9 +40,17 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const requester = parsed.data.requester_address ?? payerAddress();
+  if (!requester) {
+    return NextResponse.json(
+      { error: "No requester_address, and no server funder configured" },
+      { status: 400 },
+    );
+  }
+
   const { data, error } = await supabase
     .from("tasks")
-    .insert(parsed.data)
+    .insert({ ...parsed.data, requester_address: requester })
     .select(PUBLIC_COLUMNS)
     .single();
 
