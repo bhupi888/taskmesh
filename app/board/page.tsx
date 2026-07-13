@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Loader2, Wallet, CircleDollarSign, Users } from "lucide-react";
+import { Loader2, Wallet, CircleDollarSign, Users, Timer } from "lucide-react";
 
 /**
  * The live job board — the TaskMesh demo.
@@ -49,6 +49,43 @@ const STATUS_LABEL: Record<TaskStatus, string> = {
 function short(addr: string | null) {
   if (!addr) return "—";
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
+
+/** Seconds from a task being posted to the worker being paid. */
+function settleSeconds(t: Task): number | null {
+  if (t.status !== "paid" || !t.paid_at) return null;
+  const ms = new Date(t.paid_at).getTime() - new Date(t.created_at).getTime();
+  return ms > 0 ? ms / 1000 : null;
+}
+
+/**
+ * Timestamps render client-side only.
+ *
+ * Formatting a date during SSR and again on the client produces different
+ * output (the clock has moved), which React reports as a hydration mismatch.
+ * Rendering nothing on the server and filling in after mount avoids it.
+ * Same reason arc-commerce ships a <ClientDate>.
+ */
+function Ago({ iso }: { iso: string }) {
+  const [text, setText] = useState<string | null>(null);
+
+  useEffect(() => {
+    const tick = () => {
+      const secs = Math.max(
+        0,
+        Math.floor((Date.now() - new Date(iso).getTime()) / 1000),
+      );
+      if (secs < 60) setText(`${secs}s ago`);
+      else if (secs < 3600) setText(`${Math.floor(secs / 60)}m ago`);
+      else if (secs < 86400) setText(`${Math.floor(secs / 3600)}h ago`);
+      else setText(`${Math.floor(secs / 86400)}d ago`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [iso]);
+
+  return <span className="tabular-nums">{text ?? ""}</span>;
 }
 
 function useEarnings() {
@@ -126,7 +163,16 @@ export default function BoardPage() {
     const live = tasks.filter(
       (t) => t.status === "open" || t.status === "claimed",
     ).length;
-    return { totalPaid, completed: paid.length, live };
+
+    // Posted -> worked -> paid, with no human in the loop. This number is the
+    // pitch: an invoice-and-approval cycle measured in seconds.
+    const times = paid
+      .map(settleSeconds)
+      .filter((s): s is number => s !== null);
+    const avgSettle =
+      times.length > 0 ? times.reduce((a, b) => a + b, 0) / times.length : null;
+
+    return { totalPaid, completed: paid.length, live, avgSettle };
   }, [tasks]);
 
   const workerLabel = (t: Task) => {
@@ -155,12 +201,20 @@ export default function BoardPage() {
         </p>
       </header>
 
-      <section className="grid gap-4 sm:grid-cols-3">
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat
           icon={<CircleDollarSign size={15} />}
           label="Paid to workers"
           value={`$${stats.totalPaid.toFixed(4)}`}
           sub={`across ${stats.completed} completed ${stats.completed === 1 ? "task" : "tasks"}`}
+        />
+        <Stat
+          icon={<Timer size={15} />}
+          label="Posted → paid"
+          value={
+            stats.avgSettle === null ? "—" : `${stats.avgSettle.toFixed(1)}s`
+          }
+          sub="average, with no human in the loop"
         />
         <Stat
           icon={<Users size={15} />}
@@ -258,10 +312,14 @@ export default function BoardPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[110px]">Status</TableHead>
+                  <TableHead className="w-[130px]">Status</TableHead>
                   <TableHead>Task</TableHead>
                   <TableHead className="w-[90px] text-right">Bounty</TableHead>
-                  <TableHead className="w-[120px]">Worker</TableHead>
+                  <TableHead className="w-[110px]">Worker</TableHead>
+                  <TableHead className="w-[130px] text-right">
+                    Posted → paid
+                  </TableHead>
+                  <TableHead className="w-[90px] text-right">Age</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -289,27 +347,42 @@ export default function BoardPage() {
                   </TableRow>
                 )}
 
-                {tasks.map((t) => (
-                  <TableRow key={t.id}>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={STATUS_STYLE[t.status]}
-                      >
-                        {STATUS_LABEL[t.status]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="max-w-md">
-                      <div className="truncate text-sm">
-                        {t.prompt.replace(/^Summarize:\s*/i, "")}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      ${t.bounty_usdc}
-                    </TableCell>
-                    <TableCell className="text-sm">{workerLabel(t)}</TableCell>
-                  </TableRow>
-                ))}
+                {tasks.map((t) => {
+                  const secs = settleSeconds(t);
+                  return (
+                    <TableRow key={t.id}>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={STATUS_STYLE[t.status]}
+                        >
+                          {STATUS_LABEL[t.status]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="max-w-sm">
+                        <div className="truncate text-sm">
+                          {t.prompt.replace(/^Summarize:\s*/i, "")}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        ${t.bounty_usdc}
+                      </TableCell>
+                      <TableCell className="text-sm">{workerLabel(t)}</TableCell>
+                      <TableCell className="text-right tabular-nums text-sm">
+                        {secs === null ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          <span className="text-emerald-400">
+                            {secs.toFixed(1)}s
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right text-xs text-muted-foreground">
+                        <Ago iso={t.created_at} />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </CardContent>
