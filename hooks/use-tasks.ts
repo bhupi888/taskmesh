@@ -38,10 +38,15 @@ export type Task = {
   // per-criterion verdict written at validation (shown once submitted).
   criteria: string[] | null;
   validation: CriterionResult[] | null;
+  // The domain the ticket belongs to (a filter dimension), and where its text
+  // came from if it came from a curated real example. `source` is null for
+  // freeform tasks — it is never invented.
+  category: string | null;
+  source: string | null;
 };
 
 const COLUMNS =
-  "id,created_at,kind,prompt,requester_address,bounty_usdc,status,worker_address,claimed_at,submitted_at,paid_at,criteria,validation";
+  "id,created_at,kind,prompt,requester_address,bounty_usdc,status,worker_address,claimed_at,submitted_at,paid_at,criteria,validation,category,source";
 
 export function useTasks() {
   const [tasks, setTasks] = useState<Task[]>([]);

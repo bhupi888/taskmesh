@@ -16,6 +16,8 @@ import { SiteNav } from "@/components/site-nav";
 import { PostTask } from "@/components/post-task";
 import { PayButton } from "@/components/pay-button";
 import { ValidationChecklist } from "@/components/validation-checklist";
+import { PaymentTrace } from "@/components/payment-trace";
+import { CATEGORIES } from "@/lib/examples";
 import { Loader2, Wallet, CircleDollarSign, Users, Timer } from "lucide-react";
 
 /**
@@ -149,7 +151,16 @@ function Stat({
 }
 
 export default function BoardPage() {
-  const { tasks, loading } = useTasks();
+  const { tasks: allTasks, loading } = useTasks();
+
+  // Browse the board by expertise. Filtering happens client-side because the
+  // realtime hook already holds every task — a refetch per filter change would
+  // just fight the live subscription.
+  const [filter, setFilter] = useState<string | null>(null);
+  const tasks = useMemo(
+    () => (filter ? allTasks.filter((t) => t.category === filter) : allTasks),
+    [allTasks, filter],
+  );
   const earnings = useEarnings();
 
   const nameByAddress = useMemo(() => {
@@ -158,13 +169,17 @@ export default function BoardPage() {
     return m;
   }, [earnings]);
 
+  // Deliberately computed over ALL tasks, not the filtered view: these are
+  // board-wide facts (total USDC settled, average posted→paid time). A category
+  // filter narrows what you're browsing — it must not appear to change what the
+  // platform has actually paid out.
   const stats = useMemo(() => {
-    const paid = tasks.filter((t) => t.status === "paid");
+    const paid = allTasks.filter((t) => t.status === "paid");
     const totalPaid = paid.reduce(
       (sum, t) => sum + parseFloat(t.bounty_usdc || "0"),
       0,
     );
-    const live = tasks.filter(
+    const live = allTasks.filter(
       (t) => t.status === "open" || t.status === "claimed",
     ).length;
 
@@ -177,7 +192,7 @@ export default function BoardPage() {
       times.length > 0 ? times.reduce((a, b) => a + b, 0) / times.length : null;
 
     return { totalPaid, completed: paid.length, live, avgSettle };
-  }, [tasks]);
+  }, [allTasks]);
 
   const workerLabel = (t: Task) => {
     if (!t.worker_address) return "—";
@@ -340,7 +355,39 @@ export default function BoardPage() {
 
         {/* The board itself. */}
         <section className="space-y-3">
-          <h2 className="text-lg font-semibold">The board</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold">The board</h2>
+
+            {/* Browse by expertise. A worker agent can specialise on the same
+                dimension: npm run worker -- --category "Billing & Payments" */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setFilter(null)}
+                className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                  filter === null
+                    ? "border-foreground/40 text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                All
+              </button>
+              {CATEGORIES.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setFilter(c)}
+                  className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                    filter === c
+                      ? "border-foreground/40 text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          </div>
 
         <Card>
           <CardContent className="p-0">
@@ -399,6 +446,23 @@ export default function BoardPage() {
                         <div className="truncate text-sm">
                           {t.prompt.replace(/^Summarize:\s*/i, "")}
                         </div>
+                        {/* Where the text came from. Only ever set for the
+                            curated real-world examples — a freeform task shows
+                            nothing rather than a made-up source. */}
+                        {(t.category || t.source) && (
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                            {t.category && (
+                              <span className="rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                {t.category}
+                              </span>
+                            )}
+                            {t.source && (
+                              <span className="truncate text-[10px] text-muted-foreground">
+                                Sourced: {t.source}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         ${t.bounty_usdc}
@@ -424,9 +488,12 @@ export default function BoardPage() {
                               validation={t.validation}
                               status={t.status}
                             />
-                            <span className="text-xs text-emerald-400">
+                            <span className="block text-xs text-emerald-400">
                               paid — worker keeps the bounty
                             </span>
+                            {/* Where the money actually went, and the single
+                                on-chain tx that settled the whole batch. */}
+                            <PaymentTrace taskId={t.id} />
                           </div>
                         ) : t.status === "claimed" ? (
                           <ValidationChecklist

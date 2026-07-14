@@ -26,6 +26,10 @@ const PostTask = z.object({
     .regex(/^0x[a-fA-F0-9]{40}$/)
     .optional(),
   kind: z.literal("summarize").default("summarize"),
+  category: z.string().min(1).max(60).nullish(),
+  // Where the task's TEXT came from, when it came from a curated real-world
+  // example. Null for anything typed freehand — never fabricate a source.
+  source: z.string().min(1).max(200).nullish(),
 });
 
 // Everything except `result` — see above. `criteria`/`validation` are the
@@ -33,7 +37,7 @@ const PostTask = z.object({
 // expose (they never contain the paywalled result — see the 20260714010000
 // migration and lib/llm.ts).
 const PUBLIC_COLUMNS =
-  "id,created_at,kind,prompt,requester_address,bounty_usdc,status,worker_address,claimed_at,submitted_at,paid_at,criteria,validation";
+  "id,created_at,kind,prompt,requester_address,bounty_usdc,status,worker_address,claimed_at,submitted_at,paid_at,criteria,validation,category,source";
 
 export async function POST(req: NextRequest) {
   const parsed = PostTask.safeParse(await req.json().catch(() => null));
@@ -83,6 +87,7 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   const status = req.nextUrl.searchParams.get("status");
+  const category = req.nextUrl.searchParams.get("category");
 
   let query = supabase
     .from("tasks")
@@ -91,6 +96,9 @@ export async function GET(req: NextRequest) {
     .limit(50);
 
   if (status) query = query.eq("status", status);
+  // Lets a worker agent specialise (`npm run worker -- --category "Billing …"`)
+  // and the board filter to one expertise.
+  if (category) query = query.eq("category", category);
 
   const { data, error } = await query;
   if (error) {

@@ -10,6 +10,7 @@
  *   npm run worker -- --name alice          # TaskMesh issues it a Circle wallet
  *   npm run worker -- 0xAbC...              # or bring your own address
  *   npm run worker -- --name eve --lazy     # a BAD worker: submits filler
+ *   npm run worker -- --name bob --category "Billing & Payments"   # a specialist
  *
  * Run two at once to see the board hand different jobs to different workers,
  * each paid into their own wallet. Run a --lazy one to watch the platform's
@@ -23,6 +24,17 @@ const POLL_MS = 2000;
 
 /** Submit filler instead of doing the job — used to demo that validation bites. */
 const lazy = process.argv.includes("--lazy");
+
+/**
+ * Only claim tasks in one category — a worker that has a specialism.
+ *
+ * This is what makes the board a market of competing *specialists* rather than
+ * a queue with one interchangeable worker: run two agents on different
+ * categories and each only takes the work it's good at.
+ */
+const categoryFlag = process.argv.indexOf("--category");
+const category =
+  categoryFlag !== -1 ? process.argv[categoryFlag + 1] : undefined;
 
 /**
  * Tasks this worker has already been rejected on.
@@ -127,7 +139,11 @@ async function doTask(task: Task): Promise<string> {
 }
 
 async function tick() {
-  const res = await fetch(`${BASE_URL}/api/tasks?status=open`);
+  const url = new URL("/api/tasks", BASE_URL);
+  url.searchParams.set("status", "open");
+  if (category) url.searchParams.set("category", category);
+
+  const res = await fetch(url);
   if (!res.ok) {
     console.error(`board unreachable: HTTP ${res.status}`);
     return;
@@ -193,7 +209,10 @@ async function tick() {
 console.log(`TaskMesh worker`);
 console.log(`  paid to: ${workerAddress}`);
 console.log(`  board:   ${BASE_URL}`);
-console.log(`  watching for open tasks...\n`);
+if (category) console.log(`  specialism: ${category}`);
+console.log(
+  `  watching for open tasks${category ? ` in ${category}` : ""}...\n`,
+);
 
 await tick();
 setInterval(() => {
