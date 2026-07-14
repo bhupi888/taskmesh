@@ -39,6 +39,38 @@ export async function POST(
     return NextResponse.json({ error: "worker_address required" }, { status: 400 });
   }
 
+  // Has this worker already failed validation on this exact task?
+  //
+  // A rejected task goes back on the board, so without this check the same
+  // worker can re-claim it and submit garbage again — burning one LLM
+  // validation call per attempt, at OUR expense. worker.mts backs off on its
+  // own, but that's etiquette, not enforcement: a hostile agent wouldn't run
+  // our client. This is the enforcement.
+  //
+  // Narrow by design: it blocks this worker on THIS task only. The task stays
+  // claimable by every other worker, and this worker stays free to claim
+  // anything else. Not a reputation system.
+  const { data: priorRejection, error: rejectionError } = await supabase
+    .from("task_rejections")
+    .select("reason")
+    .eq("task_id", id)
+    .eq("worker_address", parsed.data.worker_address)
+    .maybeSingle();
+
+  if (rejectionError) {
+    return NextResponse.json({ error: rejectionError.message }, { status: 500 });
+  }
+
+  if (priorRejection) {
+    return NextResponse.json(
+      {
+        error: "This worker already failed validation on this task",
+        reason: priorRejection.reason,
+      },
+      { status: 403 },
+    );
+  }
+
   const { data, error } = await supabase
     .from("tasks")
     .update({

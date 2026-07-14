@@ -99,8 +99,35 @@ export async function POST(
     gradedCriteria = verdict.criteria;
 
     if (!verdict.pass) {
-      // Rejected. Put the task back on the board — the result was never written
-      // to task_results (we only store it after a pass), so nothing to discard.
+      // Remember WHO failed this task, before putting it back on the board.
+      //
+      // Without this the task returns to `open` and the same worker can just
+      // claim it again, submit garbage again, and burn another LLM validation
+      // call — the cost of which lands on us, not on them. /claim reads this row
+      // and refuses. The task stays claimable by every OTHER worker.
+      //
+      // Best-effort: a failure to record this must not turn into a failure to
+      // reject bad work. Worst case we fall back to the old behaviour.
+      const { error: recordError } = await supabase
+        .from("task_rejections")
+        .upsert(
+          {
+            task_id: id,
+            worker_address: parsed.data.worker_address,
+            reason: verdict.reason,
+          },
+          { onConflict: "task_id,worker_address" },
+        );
+
+      if (recordError) {
+        console.error(
+          `[taskmesh] could not record rejection for ${id.slice(0, 8)}:`,
+          recordError.message,
+        );
+      }
+
+      // Put the task back on the board — the result was never written to
+      // task_results (we only store it after a pass), so nothing to discard.
       const { error: rejectError } = await supabase
         .from("tasks")
         .update({

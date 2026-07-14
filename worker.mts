@@ -166,6 +166,17 @@ async function tick() {
       console.log(`  ${task.id.slice(0, 8)} — beaten to it by another worker`);
       continue;
     }
+    // 403 = the platform is refusing us this task because we already failed
+    // validation on it. The `rejected` Set above stops a well-behaved worker
+    // from asking twice; this is what stops a hostile one. Record it locally so
+    // we stop asking, and move on.
+    if (claim.status === 403) {
+      rejected.add(task.id);
+      console.error(
+        `  ${task.id.slice(0, 8)} — refused: already failed validation on this task`,
+      );
+      continue;
+    }
     if (!claim.ok) {
       console.error(`  ${task.id.slice(0, 8)} — claim failed: ${claim.status}`);
       continue;
