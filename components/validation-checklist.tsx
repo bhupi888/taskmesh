@@ -10,8 +10,9 @@ import type { CriterionResult, TaskStatus } from "@/hooks/use-tasks";
  *   - claimed  → the acceptance criteria as a neutral checklist ("here's what
  *                you're judged against"), before any grading has happened.
  *   - submitted/paid → the per-criterion verdict, each item checked or crossed,
- *                labelled "approved for payment" — this is what visually gates
- *                the "Pay & unlock" button.
+ *                labelled "approved for payment" — this is what gates SETTLEMENT.
+ *                Passing it is what causes the bounty to be paid; there is no
+ *                button and no human approval step (see components/pay-button).
  *
  * The reasoning strings are deliberately not shown here: the validator is told
  * never to reproduce the paywalled summary in them, but keeping the board to

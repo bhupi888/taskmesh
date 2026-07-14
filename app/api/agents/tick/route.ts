@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { runHostedWorker } from "@/lib/hosted-worker";
 
 /**
@@ -16,8 +16,8 @@ import { runHostedWorker } from "@/lib/hosted-worker";
 
 export const maxDuration = 60;
 
-export async function POST() {
-  const id = await runHostedWorker();
+export async function POST(req: NextRequest) {
+  const id = await runHostedWorker(req.nextUrl.origin);
   return NextResponse.json(
     id
       ? { worked: id }

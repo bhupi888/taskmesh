@@ -88,6 +88,40 @@ export async function payForResult(resultUrl: string): Promise<PaidResult> {
   };
 }
 
+/**
+ * Settle a task the moment its work passes validation — no human click.
+ *
+ * THIS IS THE POINT OF THE WHOLE PROJECT, so it's worth being precise about what
+ * changed. The pitch has always been "no human clicking approve", but until now
+ * the demo still required someone to press "Pay & unlock" after validation
+ * passed. That was a real contradiction between what we said and what we shipped.
+ *
+ * Now: work is graded, and if it passes, the bounty settles immediately. The
+ * human is out of the loop entirely — post a task, walk away, the worker gets
+ * paid.
+ *
+ * The trust model is UNCHANGED. Payment is still gated on validation, not on
+ * submission — bad work still never becomes payable. We didn't remove the check;
+ * we removed the button in front of it.
+ *
+ * Best-effort by design: this runs after the response has gone out, so a failure
+ * here must never break submitting work. If it fails, the task simply stays at
+ * `submitted` and the Pay button (kept as a manual fallback) can still settle it.
+ */
+export async function settleTask(origin: string, taskId: string): Promise<void> {
+  try {
+    const paid = await payForResult(`${origin}/api/tasks/${taskId}/result`);
+    console.log(
+      `[taskmesh] auto-settled ${paid.amount_usdc} USDC -> ${paid.paid_to} (task ${taskId.slice(0, 8)}) — no human involved`,
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[taskmesh] auto-settle failed for ${taskId.slice(0, 8)}: ${message} — task stays 'submitted', the Pay button can still settle it`,
+    );
+  }
+}
+
 /** The address the dashboard posts tasks as. */
 export function payerAddress(): string | undefined {
   return process.env.BUYER_ADDRESS;

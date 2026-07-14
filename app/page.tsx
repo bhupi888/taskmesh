@@ -48,7 +48,7 @@ const STATUS_STYLE: Record<TaskStatus, string> = {
 const STATUS_LABEL: Record<TaskStatus, string> = {
   open: "open",
   claimed: "claimed",
-  submitted: "awaiting payment",
+  submitted: "settling",
   paid: "paid",
 };
 
@@ -235,8 +235,8 @@ export default function BoardPage() {
               "requester posts a task",
               "worker claims it",
               "does the work",
-              "402 Payment Required",
-              "pays → worker is paid",
+              "AI grades it",
+              "passes → paid automatically",
             ].map((step, i, arr) => (
               <span key={step} className="flex items-center gap-2">
                 <span className="rounded-full border px-2.5 py-1">{step}</span>
@@ -398,7 +398,9 @@ export default function BoardPage() {
                   <TableHead>Task</TableHead>
                   <TableHead className="w-[90px] text-right">Bounty</TableHead>
                   <TableHead className="w-[110px]">Worker</TableHead>
-                  <TableHead className="w-[260px]">Result</TableHead>
+                  <TableHead className="w-[260px]">
+                    Validation &amp; settlement
+                  </TableHead>
                   <TableHead className="w-[110px] text-right">
                     Posted → paid
                   </TableHead>
@@ -489,7 +491,7 @@ export default function BoardPage() {
                               status={t.status}
                             />
                             <span className="block text-xs text-emerald-400">
-                              paid — worker keeps the bounty
+                              paid automatically — nobody approved this
                             </span>
                             {/* Where the money actually went, and the single
                                 on-chain tx that settled the whole batch. */}

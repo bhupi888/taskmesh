@@ -114,8 +114,9 @@ export async function POST(req: NextRequest) {
   // Laptop workers still race for the same task and can win it — nova claims via
   // the same atomic `.eq("status","open")` update, so whoever gets there first
   // gets the job. Nothing here makes the board any less of a market.
+  const origin = req.nextUrl.origin;
   after(async () => {
-    await runHostedWorker();
+    await runHostedWorker(origin);
   });
 
   return NextResponse.json(data, { status: 201 });

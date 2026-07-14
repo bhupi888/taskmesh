@@ -1,9 +1,14 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { z } from "zod";
 import { getAddress } from "viem";
 import { supabase } from "@/lib/x402";
 import { deriveCriteria, llmConfigured, validate } from "@/lib/llm";
+import { settleTask } from "@/lib/payer";
 import type { CriterionResult } from "@/lib/llm";
+
+// Settlement happens after the response is sent, and can involve an on-chain
+// Gateway deposit when the payer runs low.
+export const maxDuration = 60;
 
 /**
  * A worker agent submits its finished work — and the platform grades it.
@@ -198,7 +203,18 @@ export async function POST(
   }
 
   console.log(
-    `[taskmesh] submitted ${id.slice(0, 8)} — awaiting payment of ${data.bounty_usdc} USDC to ${data.worker_address}`,
+    `[taskmesh] submitted ${id.slice(0, 8)} — settling ${data.bounty_usdc} USDC to ${data.worker_address}`,
   );
+
+  // The work passed. Pay for it — now, automatically, with nobody clicking
+  // anything. This is what "no human in the loop" actually means, and until this
+  // existed the demo contradicted the pitch.
+  //
+  // After the response, so the worker isn't left hanging on an on-chain deposit.
+  const origin = req.nextUrl.origin;
+  after(async () => {
+    await settleTask(origin, id);
+  });
+
   return NextResponse.json(data);
 }

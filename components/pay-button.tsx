@@ -1,18 +1,23 @@
 "use client";
 
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Loader2, Lock, Unlock } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Loader2, AlertTriangle } from "lucide-react";
 
 /**
- * "Pay & unlock" — the human end of the x402 paywall.
+ * Settlement status — deliberately NOT a button any more.
  *
- * The work is finished and sitting behind a 402. Clicking this signs a USDC
- * authorization server-side and settles the bounty to the WORKER, then shows
- * the result that was being withheld.
+ * This used to be "Pay & unlock": a thing a human clicked after validation
+ * passed. That was the one place the demo contradicted the pitch — we said "no
+ * human clicking approve", then made you click approve.
  *
- * The first click after the payer runs low can take ~15s (an on-chain Gateway
- * deposit). Every one after that is instant — that's batching doing its job.
+ * The bounty now settles automatically the moment work passes validation (see
+ * `settleTask` in lib/payer.ts). So a task sitting at `submitted` isn't waiting
+ * on you — it's mid-settlement, and flips to `paid` on its own over realtime.
+ *
+ * THE ABSENCE OF A BUTTON IS THE FEATURE. Don't put one back as the primary
+ * action. The manual path still exists (POST /api/tasks/:id/pay) and is surfaced
+ * here only if auto-settlement visibly failed, so a worker never ends up
+ * silently unpaid.
  */
 export function PayButton({
   taskId,
@@ -21,53 +26,58 @@ export function PayButton({
   taskId: string;
   bounty: string;
 }) {
-  const [paying, setPaying] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stuck, setStuck] = useState(false);
 
-  async function pay() {
-    setPaying(true);
+  // Settlement can legitimately take ~15s when the payer needs an on-chain
+  // Gateway top-up first. Well past that, something actually went wrong.
+  useEffect(() => {
+    const t = setTimeout(() => setStuck(true), 45_000);
+    return () => clearTimeout(t);
+  }, []);
+
+  async function retry() {
+    setRetrying(true);
     setError(null);
     try {
       const res = await fetch(`/api/tasks/${taskId}/pay`, { method: "POST" });
       const body = await res.json();
-      if (!res.ok) throw new Error(body.detail ?? body.error ?? `HTTP ${res.status}`);
-      setResult(body.result);
+      if (!res.ok) {
+        throw new Error(body.detail ?? body.error ?? `HTTP ${res.status}`);
+      }
+      // The board picks the flip to `paid` up over realtime — nothing to set.
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setPaying(false);
+      setRetrying(false);
     }
   }
 
-  if (result) {
+  if (stuck) {
     return (
       <div className="space-y-1">
-        <div className="flex items-center gap-1.5 text-xs text-emerald-400">
-          <Unlock size={12} />
-          unlocked
+        <div className="flex items-center gap-1.5 text-xs text-amber-400">
+          <AlertTriangle size={12} />
+          settlement didn&apos;t complete
         </div>
-        <p className="text-sm">{result}</p>
+        <button
+          type="button"
+          onClick={retry}
+          disabled={retrying}
+          className="text-xs underline underline-offset-2 text-muted-foreground hover:text-foreground disabled:opacity-50"
+        >
+          {retrying ? "retrying…" : `retry settling $${bounty}`}
+        </button>
+        {error && <p className="max-w-xs text-xs text-red-400">{error}</p>}
       </div>
     );
   }
 
   return (
-    <div className="space-y-1">
-      <Button size="sm" variant="outline" onClick={pay} disabled={paying}>
-        {paying ? (
-          <>
-            <Loader2 className="animate-spin" size={13} />
-            Paying…
-          </>
-        ) : (
-          <>
-            <Lock size={13} />
-            Pay ${bounty} &amp; unlock
-          </>
-        )}
-      </Button>
-      {error && <p className="text-xs text-red-400 max-w-xs">{error}</p>}
+    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <Loader2 className="animate-spin" size={12} />
+      settling ${bounty} to the worker — nobody approves this
     </div>
   );
 }

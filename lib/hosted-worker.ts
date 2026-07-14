@@ -2,6 +2,7 @@ import { getAddress } from "viem";
 import { supabase } from "@/lib/x402";
 import { provisionWorkerWallet } from "@/lib/circle-wallets";
 import { summarize, validate, deriveCriteria, llmConfigured } from "@/lib/llm";
+import { settleTask } from "@/lib/payer";
 
 /**
  * A worker agent that lives on the server instead of on somebody's laptop.
@@ -62,7 +63,7 @@ async function novaAddress(): Promise<string> {
  * throws into the caller: this runs *after* the HTTP response has been sent, so
  * a failure here must not be able to break posting a task.
  */
-export async function runHostedWorker(): Promise<string | null> {
+export async function runHostedWorker(origin: string): Promise<string | null> {
   if (!llmConfigured()) return null;
 
   try {
@@ -149,7 +150,14 @@ export async function runHostedWorker(): Promise<string | null> {
       .eq("status", "claimed")
       .eq("worker_address", address);
 
-    console.log(`[nova] submitted ${task.id.slice(0, 8)} — awaiting payment`);
+    console.log(`[nova] submitted ${task.id.slice(0, 8)} — settling`);
+
+    // Nova writes to the tables directly rather than going through
+    // /api/tasks/:id/submit, so she does NOT inherit that route's auto-settle.
+    // Without this line her work would sit unpaid forever while a laptop
+    // worker's identical work paid out — settle here too.
+    await settleTask(origin, task.id);
+
     return task.id;
   } catch (err) {
     // Posting a task must never fail because the hosted worker did.
