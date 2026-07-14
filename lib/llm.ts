@@ -44,9 +44,33 @@ function firstText(content: Anthropic.ContentBlock[]): string {
   return "";
 }
 
-/** The worker agent doing the actual job. */
-export async function summarize(prompt: string): Promise<string> {
+/**
+ * The worker agent doing the actual job.
+ *
+ * `criteria` is the acceptance criteria the platform will grade this against —
+ * the same list the board shows as "will be judged on" when the task is claimed.
+ *
+ * PASS THEM IN. They were derived at post time and shown to the worker in the
+ * UI, but for a while nothing actually handed them to the model, so the worker
+ * was being graded against a rubric it couldn't see. It failed honest work by
+ * omitting a detail nobody told it mattered — and since a rejected worker is
+ * then blocked from re-claiming, the task could end up orphaned on the board.
+ *
+ * This is not the validator going soft: the grader is unchanged and still fails
+ * unfaithful work. It's the worker finally being told the brief.
+ */
+export async function summarize(
+  prompt: string,
+  criteria: string[] = [],
+): Promise<string> {
   const text = prompt.replace(/^Summarize:\s*/i, "").trim();
+
+  const brief =
+    criteria.length > 0
+      ? "\n\nYour summary will be graded against these criteria. Satisfy every " +
+        "one of them, while still keeping to two sentences:\n" +
+        criteria.map((c, i) => `${i + 1}. ${c}`).join("\n")
+      : "";
 
   const response = await anthropic().messages.create({
     model: MODEL,
@@ -54,7 +78,9 @@ export async function summarize(prompt: string): Promise<string> {
     thinking: { type: "adaptive" },
     system:
       "You summarize support tickets for a triage queue. Two sentences maximum. " +
-      "State the problem and the most likely cause. No preamble, no restating the question.",
+      "State the problem and the most likely cause. No preamble, no restating " +
+      "the question. Do not invent specifics — hedge a likely cause as likely." +
+      brief,
     messages: [{ role: "user", content: text }],
   });
 

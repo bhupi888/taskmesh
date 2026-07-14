@@ -64,6 +64,13 @@ export function PostTask() {
       }
       setPrompt(""); // the board updates itself — realtime picks the new row up
       setPicked(null);
+
+      // Belt and braces: posting already wakes the hosted worker server-side via
+      // after(). But on a COLD function that hook was observed to get dropped —
+      // the task just sat at `open`. A cold start is exactly when a judge
+      // arrives, so nudge the worker from here too. The claim is atomic, so a
+      // duplicate wake is harmless: whoever gets there first gets the job.
+      fetch("/api/agents/tick", { method: "POST" }).catch(() => {});
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {

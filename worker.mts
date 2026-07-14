@@ -113,6 +113,8 @@ interface Task {
   prompt: string;
   bounty_usdc: string;
   status: string;
+  /** What the platform will grade this against — the board shows it on claim. */
+  criteria: string[] | null;
 }
 
 /**
@@ -130,7 +132,9 @@ async function doTask(task: Task): Promise<string> {
   }
 
   if (llmConfigured()) {
-    return summarize(task.prompt);
+    // Hand the worker the acceptance criteria it will be graded on. Without
+    // this it's marked against a rubric it was never shown.
+    return summarize(task.prompt, task.criteria ?? []);
   }
 
   const text = task.prompt.replace(/^Summarize:\s*/i, "").trim();

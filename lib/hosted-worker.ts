@@ -105,16 +105,20 @@ export async function runHostedWorker(origin: string): Promise<string | null> {
 
     console.log(`[nova] claimed ${task.id.slice(0, 8)}`);
 
-    const result = await summarize(task.prompt);
-
-    // Graded before it can be sold, exactly as a laptop worker's would be. Nova
-    // gets no special treatment: if she submits bad work she is rejected, the
-    // task goes back on the board, and she is blocked from re-claiming it.
+    // Work out the brief BEFORE doing the work, and hand it to the worker. The
+    // criteria are what the platform grades against; a worker that can't see
+    // them is being marked against a rubric it was never shown, and will fail
+    // honest work by omitting a detail nobody told it mattered.
     const criteria =
       Array.isArray(task.criteria) && task.criteria.length > 0
         ? (task.criteria as string[])
         : await deriveCriteria(task.prompt).catch(() => []);
 
+    const result = await summarize(task.prompt, criteria);
+
+    // Graded before it can be sold, exactly as a laptop worker's would be. Nova
+    // gets no special treatment: if she submits bad work she is rejected, the
+    // task goes back on the board, and she is blocked from re-claiming it.
     const verdict = await validate(task.prompt, result, criteria);
 
     if (!verdict.pass) {
