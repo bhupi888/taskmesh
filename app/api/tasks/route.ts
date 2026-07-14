@@ -1,9 +1,15 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { z } from "zod";
 import { supabase } from "@/lib/x402";
 import { payerAddress } from "@/lib/payer";
 import { deriveCriteria, llmConfigured } from "@/lib/llm";
 import { ACCOUNT_COOKIE, findAccount } from "@/lib/demo-accounts";
+import { runHostedWorker } from "@/lib/hosted-worker";
+
+// Posting kicks off the hosted worker (below), which does an LLM summarize and
+// an LLM validation after the response is sent. That work runs inside this
+// invocation, so it needs the headroom.
+export const maxDuration = 60;
 
 /**
  * The job board.
@@ -96,6 +102,22 @@ export async function POST(req: NextRequest) {
   console.log(
     `[taskmesh] posted ${data.id} — ${data.bounty_usdc} USDC — "${data.prompt.slice(0, 60)}"`,
   );
+
+  // Wake the hosted worker agent, AFTER the response goes out — the poster gets
+  // their task id immediately and watches the board flip to `claimed` in
+  // realtime a few seconds later.
+  //
+  // Why event-driven and not a cron: this project is on Vercel's Hobby plan,
+  // where cron fires at most once a day. And a judge shouldn't have to wait for
+  // a polling interval to see the thing work.
+  //
+  // Laptop workers still race for the same task and can win it — nova claims via
+  // the same atomic `.eq("status","open")` update, so whoever gets there first
+  // gets the job. Nothing here makes the board any less of a market.
+  after(async () => {
+    await runHostedWorker();
+  });
+
   return NextResponse.json(data, { status: 201 });
 }
 

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { supabase } from "@/lib/x402";
@@ -5,7 +6,7 @@ import { SiteNav } from "@/components/site-nav";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ACCOUNT_COOKIE, findAccount } from "@/lib/demo-accounts";
-import { Wallet, Bot, Inbox } from "lucide-react";
+import { Wallet, Bot, Inbox, Loader2 } from "lucide-react";
 
 /**
  * "My account" — who you are, which agents you run, and what they've done.
@@ -21,40 +22,62 @@ import { Wallet, Bot, Inbox } from "lucide-react";
  * agents did that work and hold that USDC. Nothing is fabricated.
  */
 
-// No `export const dynamic` here: this project runs Next 16 with Cache
-// Components, which rejects it. Reading cookies() already forces this page to
-// render per-request, which is what we need.
+// NEXT 16 / CACHE COMPONENTS, learned from a failed production build:
+//
+//   * `export const dynamic = "force-dynamic"` is REJECTED outright.
+//   * Anything reading cookies() or hitting the database must sit inside a
+//     <Suspense> boundary, or the build fails with "Uncached data was accessed
+//     outside of <Suspense>".
+//
+// Both of those pass in `next dev` and only blow up on `next build`, so don't
+// trust the dev server here. That's why the page is a static shell that
+// suspends around <AccountBody/> rather than being one async component.
 const EXPLORER = "https://testnet.arcscan.app/address";
 
 function short(a: string) {
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
 }
 
-export default async function AccountPage() {
+export default function AccountPage() {
+  return (
+    <>
+      <SiteNav />
+      <Suspense
+        fallback={
+          <main className="max-w-6xl mx-auto px-5 py-12 text-sm text-muted-foreground">
+            <Loader2 className="inline animate-spin mr-2" size={14} />
+            Loading your account…
+          </main>
+        }
+      >
+        <AccountBody />
+      </Suspense>
+    </>
+  );
+}
+
+async function AccountBody() {
   const store = await cookies();
   const account = findAccount(store.get(ACCOUNT_COOKIE)?.value);
 
   if (!account) {
     return (
-      <>
-        <SiteNav />
-        <main className="max-w-6xl mx-auto px-5 py-12">
-          <Card>
-            <CardContent className="pt-6 space-y-2">
-              <h1 className="text-lg font-semibold">Not signed in</h1>
-              <p className="text-sm text-muted-foreground">
-                Pick a demo account from <span className="text-foreground">Sign in</span>{" "}
-                in the top right. There&apos;s no password — it&apos;s a persona
-                switcher, not real authentication.
-              </p>
-              <p className="text-sm text-muted-foreground">
-                The <Link href="/" className="underline underline-offset-2">board</Link>{" "}
-                is public and works without signing in at all.
-              </p>
-            </CardContent>
-          </Card>
-        </main>
-      </>
+      <main className="max-w-6xl mx-auto px-5 py-12">
+        <Card>
+          <CardContent className="pt-6 space-y-2">
+            <h1 className="text-lg font-semibold">Not signed in</h1>
+            <p className="text-sm text-muted-foreground">
+              Pick a demo account from <span className="text-foreground">Sign in</span>{" "}
+              in the top right. There&apos;s no password — it&apos;s a persona
+              switcher, not real authentication.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              The <Link href="/" className="underline underline-offset-2">board</Link>{" "}
+              is public and works without signing in at all.
+            </p>
+          </CardContent>
+        </Card>
+      </main>
     );
   }
 
@@ -108,8 +131,6 @@ export default async function AccountPage() {
   const isNew = account.agents.length === 0;
 
   return (
-    <>
-      <SiteNav />
       <main className="max-w-6xl mx-auto px-5 py-8 space-y-6">
         <header className="space-y-1">
           <h1 className="text-2xl font-semibold">{account.name}</h1>
@@ -274,6 +295,5 @@ export default async function AccountPage() {
           </div>
         </section>
       </main>
-    </>
   );
 }

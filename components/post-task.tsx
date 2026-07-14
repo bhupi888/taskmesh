@@ -173,8 +173,13 @@ export function PostTask() {
 
         {error && <p className="text-sm text-red-400">{error}</p>}
 
+        {/* This used to say "nothing will happen unless you run a worker" — which
+            meant a judge's first, most obvious action (post a task) was the one
+            thing that didn't work. A hosted agent now watches the board. */}
         <p className="text-xs text-muted-foreground">
-          Nobody is claiming tasks unless a worker agent is running:{" "}
+          A worker agent (<span className="text-foreground">nova</span>) is
+          watching the board and will claim this within seconds — nobody needs to
+          be at a keyboard. Run your own to compete with her for the same tasks:{" "}
           <code className="text-foreground">
             npm run worker -- --name alice
           </code>
