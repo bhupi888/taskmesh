@@ -15,6 +15,7 @@ import {
 import { SiteNav } from "@/components/site-nav";
 import { PostTask } from "@/components/post-task";
 import { PayButton } from "@/components/pay-button";
+import { ValidationChecklist } from "@/components/validation-checklist";
 import { Loader2, Wallet, CircleDollarSign, Users, Timer } from "lucide-react";
 
 /**
@@ -404,19 +405,38 @@ export default function BoardPage() {
                       </TableCell>
                       <TableCell className="text-sm">{workerLabel(t)}</TableCell>
 
-                      {/* Where the paywall becomes something you can click. */}
-                      <TableCell className="text-sm">
+                      {/* The validation checklist, and where the paywall
+                          becomes something you can click. */}
+                      <TableCell className="text-sm align-top">
                         {t.status === "submitted" ? (
-                          <PayButton taskId={t.id} bounty={t.bounty_usdc} />
+                          <div className="space-y-2">
+                            <ValidationChecklist
+                              criteria={t.criteria}
+                              validation={t.validation}
+                              status={t.status}
+                            />
+                            <PayButton taskId={t.id} bounty={t.bounty_usdc} />
+                          </div>
                         ) : t.status === "paid" ? (
-                          <span className="text-xs text-emerald-400">
-                            paid — worker keeps the bounty
-                          </span>
+                          <div className="space-y-2">
+                            <ValidationChecklist
+                              criteria={t.criteria}
+                              validation={t.validation}
+                              status={t.status}
+                            />
+                            <span className="text-xs text-emerald-400">
+                              paid — worker keeps the bounty
+                            </span>
+                          </div>
+                        ) : t.status === "claimed" ? (
+                          <ValidationChecklist
+                            criteria={t.criteria}
+                            validation={t.validation}
+                            status={t.status}
+                          />
                         ) : (
                           <span className="text-xs text-muted-foreground">
-                            {t.status === "open"
-                              ? "waiting for a worker"
-                              : "worker is on it"}
+                            waiting for a worker
                           </span>
                         )}
                       </TableCell>

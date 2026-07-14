@@ -14,7 +14,7 @@ export async function GET(
   const { data, error } = await supabase
     .from("tasks")
     .select(
-      "id,created_at,kind,prompt,requester_address,bounty_usdc,status,worker_address,claimed_at,submitted_at,paid_at",
+      "id,created_at,kind,prompt,requester_address,bounty_usdc,status,worker_address,claimed_at,submitted_at,paid_at,criteria,validation",
     )
     .eq("id", id)
     .maybeSingle();

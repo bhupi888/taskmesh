@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { supabase } from "@/lib/x402";
 import { payerAddress } from "@/lib/payer";
+import { deriveCriteria, llmConfigured } from "@/lib/llm";
 
 /**
  * The job board.
@@ -27,9 +28,12 @@ const PostTask = z.object({
   kind: z.literal("summarize").default("summarize"),
 });
 
-// Everything except `result` — see above.
+// Everything except `result` — see above. `criteria`/`validation` are the
+// acceptance-criteria checklist and its per-criterion verdict; both are safe to
+// expose (they never contain the paywalled result — see the 20260714010000
+// migration and lib/llm.ts).
 const PUBLIC_COLUMNS =
-  "id,created_at,kind,prompt,requester_address,bounty_usdc,status,worker_address,claimed_at,submitted_at,paid_at";
+  "id,created_at,kind,prompt,requester_address,bounty_usdc,status,worker_address,claimed_at,submitted_at,paid_at,criteria,validation";
 
 export async function POST(req: NextRequest) {
   const parsed = PostTask.safeParse(await req.json().catch(() => null));
@@ -48,9 +52,22 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Derive the acceptance criteria now, so a worker sees what it's judged
+  // against the moment it claims. Best-effort: if the LLM isn't configured or
+  // the call fails, the task still posts — it just has no checklist to show.
+  let criteria: string[] | null = null;
+  if (llmConfigured()) {
+    try {
+      const derived = await deriveCriteria(parsed.data.prompt);
+      criteria = derived.length ? derived : null;
+    } catch (err) {
+      console.error("[taskmesh] criteria derivation failed:", err);
+    }
+  }
+
   const { data, error } = await supabase
     .from("tasks")
-    .insert({ ...parsed.data, requester_address: requester })
+    .insert({ ...parsed.data, requester_address: requester, criteria })
     .select(PUBLIC_COLUMNS)
     .single();
 

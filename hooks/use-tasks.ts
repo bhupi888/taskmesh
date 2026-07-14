@@ -15,6 +15,13 @@ import { createClient } from "@/lib/supabase/client";
 
 export type TaskStatus = "open" | "claimed" | "submitted" | "paid";
 
+/** One acceptance criterion and how the submitted work scored against it. */
+export type CriterionResult = {
+  criterion: string;
+  met: boolean;
+  reasoning: string;
+};
+
 export type Task = {
   id: string;
   created_at: string;
@@ -27,10 +34,14 @@ export type Task = {
   claimed_at: string | null;
   submitted_at: string | null;
   paid_at: string | null;
+  // Acceptance criteria derived at post time (shown on claim), and the
+  // per-criterion verdict written at validation (shown once submitted).
+  criteria: string[] | null;
+  validation: CriterionResult[] | null;
 };
 
 const COLUMNS =
-  "id,created_at,kind,prompt,requester_address,bounty_usdc,status,worker_address,claimed_at,submitted_at,paid_at";
+  "id,created_at,kind,prompt,requester_address,bounty_usdc,status,worker_address,claimed_at,submitted_at,paid_at,criteria,validation";
 
 export function useTasks() {
   const [tasks, setTasks] = useState<Task[]>([]);

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAddress } from "viem";
 import { supabase } from "@/lib/x402";
-import { llmConfigured, validate } from "@/lib/llm";
+import { deriveCriteria, llmConfigured, validate } from "@/lib/llm";
+import type { CriterionResult } from "@/lib/llm";
 
 /**
  * A worker agent submits its finished work — and the platform grades it.
@@ -58,7 +59,7 @@ export async function POST(
   // and this also confirms the submitter is the worker who actually claimed it.
   const { data: task, error: loadError } = await supabase
     .from("tasks")
-    .select("id,prompt,bounty_usdc,worker_address,status")
+    .select("id,prompt,bounty_usdc,worker_address,status,criteria")
     .eq("id", id)
     .eq("status", "claimed")
     .eq("worker_address", parsed.data.worker_address)
@@ -74,9 +75,28 @@ export async function POST(
     );
   }
 
+  // The per-criterion verdict to persist on a pass, so the board can render the
+  // validated checklist. Stays null when the LLM isn't configured (stub mode).
+  let gradedCriteria: CriterionResult[] | null = null;
+  // The criteria list actually graded against — usually the one stored at post
+  // time, but derived here as a fallback for tasks posted before it existed.
+  let criteriaUsed: string[] | null = Array.isArray(task.criteria)
+    ? (task.criteria as string[])
+    : null;
+
   // Grade the work before it can be sold.
   if (llmConfigured()) {
-    const verdict = await validate(task.prompt, parsed.data.result);
+    if (!criteriaUsed || criteriaUsed.length === 0) {
+      const derived = await deriveCriteria(task.prompt).catch(() => []);
+      criteriaUsed = derived.length ? derived : null;
+    }
+
+    const verdict = await validate(
+      task.prompt,
+      parsed.data.result,
+      criteriaUsed ?? [],
+    );
+    gradedCriteria = verdict.criteria;
 
     if (!verdict.pass) {
       // Rejected. Put the task back on the board — the result was never written
@@ -128,6 +148,10 @@ export async function POST(
     .update({
       status: "submitted",
       submitted_at: new Date().toISOString(),
+      // Surface the validation on the board. `criteria` is refreshed too, in
+      // case it was derived here as a fallback rather than at post time.
+      criteria: criteriaUsed,
+      validation: gradedCriteria,
     })
     .eq("id", id)
     .eq("status", "claimed")
