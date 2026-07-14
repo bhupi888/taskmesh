@@ -179,6 +179,15 @@ export function PostTask() {
             npm run worker -- --name alice
           </code>
         </p>
+
+        {/* Say whose money this is. Signing in as a demo persona does NOT give
+            you a wallet — every task posted here is funded by the one shared
+            server wallet. Don't let the UI imply otherwise. */}
+        <p className="text-xs text-muted-foreground">
+          Funded by: <span className="text-foreground">TaskMesh Test Wallet</span>{" "}
+          — the shared demo funder. Bounties are testnet USDC, and signing in
+          doesn&apos;t give you a wallet of your own.
+        </p>
       </CardContent>
     </Card>
   );

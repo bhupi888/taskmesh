@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Github } from "lucide-react";
+import { AccountPicker } from "@/components/account-picker";
 
 /**
  * Top nav for the public side of the app.
@@ -30,6 +31,7 @@ export function SiteNav() {
           >
             Payments
           </Link>
+          <AccountPicker />
           <a
             href="https://github.com/bhupi888/taskmesh"
             target="_blank"

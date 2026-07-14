@@ -3,6 +3,7 @@ import { z } from "zod";
 import { supabase } from "@/lib/x402";
 import { payerAddress } from "@/lib/payer";
 import { deriveCriteria, llmConfigured } from "@/lib/llm";
+import { ACCOUNT_COOKIE, findAccount } from "@/lib/demo-accounts";
 
 /**
  * The job board.
@@ -37,7 +38,7 @@ const PostTask = z.object({
 // expose (they never contain the paywalled result — see the 20260714010000
 // migration and lib/llm.ts).
 const PUBLIC_COLUMNS =
-  "id,created_at,kind,prompt,requester_address,bounty_usdc,status,worker_address,claimed_at,submitted_at,paid_at,criteria,validation,category,source";
+  "id,created_at,kind,prompt,requester_address,bounty_usdc,status,worker_address,claimed_at,submitted_at,paid_at,criteria,validation,category,source,posted_by";
 
 export async function POST(req: NextRequest) {
   const parsed = PostTask.safeParse(await req.json().catch(() => null));
@@ -69,9 +70,22 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // If a demo persona is selected, tag the task with them so it shows up under
+  // "Tasks you posted" on /account. Null otherwise — anonymous posting and agent
+  // posting must keep working exactly as before. This is purely additive, and it
+  // does NOT change who pays: every dashboard-initiated task is still funded by
+  // the one shared server wallet, whoever is "signed in".
+  const postedBy =
+    findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value)?.id ?? null;
+
   const { data, error } = await supabase
     .from("tasks")
-    .insert({ ...parsed.data, requester_address: requester, criteria })
+    .insert({
+      ...parsed.data,
+      requester_address: requester,
+      criteria,
+      posted_by: postedBy,
+    })
     .select(PUBLIC_COLUMNS)
     .single();
 
