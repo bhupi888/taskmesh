@@ -34,7 +34,7 @@ export async function GET(
 
   const { data: task, error: loadError } = await supabase
     .from("tasks")
-    .select("id,status,result,bounty_usdc,worker_address,requester_address")
+    .select("id,status,bounty_usdc,worker_address,requester_address")
     .eq("id", id)
     .maybeSingle();
 
@@ -53,9 +53,20 @@ export async function GET(
     );
   }
 
+  // The goods live in task_results, not on the public board — see the
+  // 20260714 migration. Fetch them with the service-role client only.
+  async function loadResult(): Promise<string | null> {
+    const { data } = await supabase
+      .from("task_results")
+      .select("result")
+      .eq("task_id", id)
+      .maybeSingle();
+    return data?.result ?? null;
+  }
+
   // Already bought. Don't charge twice for the same result.
   if (task.status === "paid") {
-    return NextResponse.json({ id: task.id, result: task.result, paid: true });
+    return NextResponse.json({ id: task.id, result: await loadResult(), paid: true });
   }
 
   if (!task.worker_address) {
@@ -139,7 +150,7 @@ export async function GET(
       .update({ status: "paid", paid_at: new Date().toISOString() })
       .eq("id", id)
       .eq("status", "submitted")
-      .select("id,result")
+      .select("id")
       .maybeSingle();
 
     if (payError || !paidTask) {
@@ -168,7 +179,7 @@ export async function GET(
 
     const response = NextResponse.json({
       id: task.id,
-      result: task.result,
+      result: await loadResult(),
       paid_to: task.worker_address,
       amount_usdc: task.bounty_usdc,
     });

@@ -79,15 +79,14 @@ export async function POST(
     const verdict = await validate(task.prompt, parsed.data.result);
 
     if (!verdict.pass) {
-      // Rejected. Put the task back on the board and discard the result — it
-      // never becomes purchasable, so nobody pays for it.
+      // Rejected. Put the task back on the board — the result was never written
+      // to task_results (we only store it after a pass), so nothing to discard.
       const { error: rejectError } = await supabase
         .from("tasks")
         .update({
           status: "open",
           worker_address: null,
           claimed_at: null,
-          result: null,
         })
         .eq("id", id)
         .eq("status", "claimed");
@@ -108,11 +107,26 @@ export async function POST(
     console.log(`[taskmesh] validated ${id.slice(0, 8)} — ${verdict.reason}`);
   }
 
+  // Store the goods in the paywalled table BEFORE flipping status. Once a task
+  // is `submitted` its result is purchasable, so the result must already exist
+  // by then; doing it in this order means the worst case is an orphan result row
+  // on a still-`claimed` task (harmless — it isn't reachable) rather than a
+  // `submitted` task with no result behind the paywall.
+  const { error: resultError } = await supabase
+    .from("task_results")
+    .upsert(
+      { task_id: id, result: parsed.data.result },
+      { onConflict: "task_id" },
+    );
+
+  if (resultError) {
+    return NextResponse.json({ error: resultError.message }, { status: 500 });
+  }
+
   const { data, error } = await supabase
     .from("tasks")
     .update({
       status: "submitted",
-      result: parsed.data.result,
       submitted_at: new Date().toISOString(),
     })
     .eq("id", id)

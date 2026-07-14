@@ -26,7 +26,7 @@ export async function POST(
 
   const { data: task, error } = await supabase
     .from("tasks")
-    .select("id,status,result,bounty_usdc,worker_address")
+    .select("id,status,bounty_usdc,worker_address")
     .eq("id", id)
     .maybeSingle();
 
@@ -37,10 +37,16 @@ export async function POST(
     return NextResponse.json({ error: "No such task" }, { status: 404 });
   }
 
-  // Already bought — hand back the goods rather than charging twice.
+  // Already bought — hand back the goods rather than charging twice. The result
+  // lives in the paywalled task_results table, not on the public board.
   if (task.status === "paid") {
+    const { data: goods } = await supabase
+      .from("task_results")
+      .select("result")
+      .eq("task_id", id)
+      .maybeSingle();
     return NextResponse.json({
-      result: task.result,
+      result: goods?.result ?? null,
       paid_to: task.worker_address,
       amount_usdc: task.bounty_usdc,
       already_paid: true,
