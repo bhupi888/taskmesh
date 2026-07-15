@@ -9,7 +9,8 @@
     "agent": "node --no-warnings --env-file=.env.local agent.mts",
     "worker": "node --no-warnings --env-file=.env.local worker.mts",
     "requester": "node --no-warnings --env-file=.env.local requester.mts",
-    "migrate": "node --no-warnings scripts/migrate.mjs"
+    "migrate": "node --no-warnings scripts/migrate.mjs",
+    "register-agent": "node --no-warnings scripts/register-agent.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",
