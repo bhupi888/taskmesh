@@ -116,17 +116,12 @@ export async function GET(
       Buffer.from(paymentSignature, "base64").toString("utf-8"),
     );
 
-    const verifyResult = await facilitator.verify(paymentPayload, requirements);
-    if (!verifyResult.isValid) {
-      return NextResponse.json(
-        {
-          error: "Payment verification failed",
-          reason: verifyResult.invalidReason,
-        },
-        { status: 402 },
-      );
-    }
-
+    // Circle's own seller quickstart is explicit: "settle() is optimized for
+    // low latency and guarantees settlement. Use settle() directly rather than
+    // calling verify() followed by settle() in production flows." We used to
+    // call both — settle() already verifies internally, so the extra verify()
+    // round trip was pure added latency on the posted-to-paid number we
+    // actually put on a slide. Don't re-add it.
     const settleResult = await facilitator.settle(paymentPayload, requirements);
     if (!settleResult.success) {
       console.error(
@@ -141,7 +136,7 @@ export async function GET(
       );
     }
 
-    const payer = settleResult.payer ?? verifyResult.payer ?? "unknown";
+    const payer = settleResult.payer ?? "unknown";
 
     // Release the goods and close the task out. Guarded on `submitted` so a
     // double-spend race can't pay the worker twice for one task.

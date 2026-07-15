@@ -42,13 +42,16 @@ export async function GET(
 ) {
   const { id } = await params;
 
-  // The payment event for this task. `task_id` lives inside the `raw` JSON blob
-  // that withGateway() writes — there's no dedicated column for it.
+  // The task's OWN settlement (requester → worker). Filter by endpoint, not just
+  // raw.task_id: a two-hop task also has a worker → service payment carrying the
+  // same task_id, and matching both would break maybeSingle(). The result route
+  // is the requester → worker leg, uniquely.
   const { data: event, error } = await supabase
     .from("payment_events")
     .select("gateway_tx,amount_usdc,payer,created_at")
-    .eq("raw->>task_id", id)
+    .eq("endpoint", `/api/tasks/${id}/result`)
     .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (error) {

@@ -44,7 +44,7 @@ const PostTask = z.object({
 // expose (they never contain the paywalled result — see the 20260714010000
 // migration and lib/llm.ts).
 const PUBLIC_COLUMNS =
-  "id,created_at,kind,prompt,requester_address,bounty_usdc,status,worker_address,claimed_at,submitted_at,paid_at,criteria,validation,category,source,posted_by";
+  "id,created_at,kind,prompt,requester_address,bounty_usdc,status,worker_address,claimed_at,submitted_at,paid_at,criteria,validation,category,source,posted_by,subservice";
 
 export async function POST(req: NextRequest) {
   const parsed = PostTask.safeParse(await req.json().catch(() => null));

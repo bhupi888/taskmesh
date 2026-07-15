@@ -493,6 +493,12 @@ export default function BoardPage() {
                             <span className="block text-xs text-emerald-400">
                               paid automatically — nobody approved this
                             </span>
+                            {t.subservice && (
+                              <span className="block text-xs text-sky-400">
+                                ↳ worker paid ${t.subservice.amount_usdc} to a
+                                specialist agent for triage — two hops, one job
+                              </span>
+                            )}
                             {/* Where the money actually went, and the single
                                 on-chain tx that settled the whole batch. */}
                             <PaymentTrace taskId={t.id} />

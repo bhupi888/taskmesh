@@ -3,6 +3,7 @@ import { supabase } from "@/lib/x402";
 import { provisionWorkerWallet } from "@/lib/circle-wallets";
 import { summarize, validate, deriveCriteria, llmConfigured } from "@/lib/llm";
 import { settleTask } from "@/lib/payer";
+import { buyTriage, spendingEnabled } from "@/lib/worker-spend";
 
 /**
  * A worker agent that lives on the server instead of on somebody's laptop.
@@ -79,7 +80,7 @@ export async function runHostedWorker(origin: string): Promise<string | null> {
 
     const { data: open } = await supabase
       .from("tasks")
-      .select("id,prompt,criteria")
+      .select("id,prompt,criteria,category")
       .eq("status", "open")
       .order("created_at", { ascending: true })
       .limit(5);
@@ -136,11 +137,35 @@ export async function runHostedWorker(origin: string): Promise<string | null> {
       return null;
     }
 
+    // The two-hop: for Customer Support tickets, nova isn't a routing
+    // specialist, so she BUYS a triage analysis from the x402 service and folds
+    // it into what she delivers. Real second settlement (worker → service),
+    // gated to one category to keep cost and latency sane, and best-effort — if
+    // the buy fails she just ships the plain summary. Only done after the work
+    // passed validation, so we never pay for a sub-service on rejected work.
+    let finalResult = result;
+    let subservice: { amount_usdc: string; paid_to: string } | null = null;
+    if (task.category === "Customer Support" && spendingEnabled()) {
+      const source = task.prompt.replace(/^Summarize:\s*/i, "").trim();
+      const bought = await buyTriage(origin, source, task.id);
+      if (bought) {
+        const a = bought.analysis;
+        finalResult =
+          `${result}\n\n— Triage (bought from a specialist agent for $${bought.amount_usdc}) —\n` +
+          `Severity: ${a.severity} · Component: ${a.component} · ` +
+          `Owner: ${a.suggested_owner} · SLA at risk: ${a.sla_risk ? "yes" : "no"}`;
+        subservice = { amount_usdc: bought.amount_usdc, paid_to: bought.paid_to };
+        console.log(
+          `[nova] bought triage for ${task.id.slice(0, 8)} — paid ${bought.amount_usdc} USDC to ${bought.paid_to.slice(0, 8)}`,
+        );
+      }
+    }
+
     // Result into the paywalled table BEFORE flipping status: once a task is
     // `submitted` it is purchasable, so the goods must already be behind the 402.
     await supabase
       .from("task_results")
-      .upsert({ task_id: task.id, result }, { onConflict: "task_id" });
+      .upsert({ task_id: task.id, result: finalResult }, { onConflict: "task_id" });
 
     await supabase
       .from("tasks")
@@ -149,6 +174,7 @@ export async function runHostedWorker(origin: string): Promise<string | null> {
         submitted_at: new Date().toISOString(),
         criteria,
         validation: verdict.criteria,
+        subservice,
       })
       .eq("id", task.id)
       .eq("status", "claimed")

@@ -89,6 +89,63 @@ export async function summarize(
   return summary;
 }
 
+/**
+ * A specialist triage analysis — the thing a worker pays the sub-service for.
+ *
+ * Deliberately DISTINCT from summarize(): a summary is two prose sentences; this
+ * is structured routing metadata (how urgent, which component, who should own
+ * it, is an SLA at risk). A worker that's good at summarizing isn't necessarily
+ * good at severity calls — so it buys this from a specialist mid-task. That's
+ * the whole point of the two-hop payment.
+ */
+export interface TriageAnalysis {
+  severity: "low" | "medium" | "high" | "critical";
+  component: string;
+  suggested_owner: string;
+  sla_risk: boolean;
+}
+
+/** The specialist sub-service's brain. Sold over x402 at /api/services/triage. */
+export async function triageAnalysis(text: string): Promise<TriageAnalysis> {
+  const response = await anthropic().messages.create({
+    model: MODEL,
+    max_tokens: 300,
+    system:
+      "You are a support-triage specialist. Given a support ticket, decide how " +
+      "it should be routed. Be decisive: pick the single most likely component " +
+      "and owning team, a severity, and whether an SLA is at risk. Do not " +
+      "summarize the ticket — output only the routing decision.",
+    messages: [{ role: "user", content: text.slice(0, 4000) }],
+    output_config: {
+      format: {
+        type: "json_schema",
+        schema: {
+          type: "object",
+          properties: {
+            severity: { type: "string", enum: ["low", "medium", "high", "critical"] },
+            component: { type: "string", description: "The affected component/area" },
+            suggested_owner: { type: "string", description: "Team or role that should own it" },
+            sla_risk: { type: "boolean", description: "Is a time-bound SLA at risk?" },
+          },
+          required: ["severity", "component", "suggested_owner", "sla_risk"],
+          additionalProperties: false,
+        },
+      },
+    },
+  });
+
+  const raw = firstText(response.content);
+  const p = JSON.parse(raw) as Partial<TriageAnalysis>;
+  return {
+    severity: (["low", "medium", "high", "critical"].includes(p.severity as string)
+      ? p.severity
+      : "medium") as TriageAnalysis["severity"],
+    component: String(p.component ?? "unknown"),
+    suggested_owner: String(p.suggested_owner ?? "unassigned"),
+    sla_risk: Boolean(p.sla_risk),
+  };
+}
+
 /** One acceptance criterion and whether the submitted work met it. */
 export interface CriterionResult {
   criterion: string;

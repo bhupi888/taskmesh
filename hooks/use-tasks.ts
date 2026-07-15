@@ -43,10 +43,13 @@ export type Task = {
   // freeform tasks — it is never invented.
   category: string | null;
   source: string | null;
+  // Set when the worker paid a specialist sub-service to help fulfil this task
+  // (the two-hop case). Null for single-hop tasks.
+  subservice: { amount_usdc: string; paid_to: string } | null;
 };
 
 const COLUMNS =
-  "id,created_at,kind,prompt,requester_address,bounty_usdc,status,worker_address,claimed_at,submitted_at,paid_at,criteria,validation,category,source";
+  "id,created_at,kind,prompt,requester_address,bounty_usdc,status,worker_address,claimed_at,submitted_at,paid_at,criteria,validation,category,source,subservice";
 
 export function useTasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
